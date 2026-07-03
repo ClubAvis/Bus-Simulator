@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>BusSimulator - Browser 3D Bus Driving Simulation</title>
+<link rel="stylesheet" href="style.css" />
+
+<!-- Three.js and Cannon-es loaded from CDN as ES Modules. No Node.js / build step required. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+  }
+}
+</script>
+</head>
+<body>
+
+  <!-- ============ RENDER CANVAS ============ -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- ============ LOADING SCREEN ============ -->
+  <div id="loadingScreen" class="overlay">
+    <div class="loading-box">
+      <h1 class="game-title">BUS<span>SIMULATOR</span></h1>
+      <div class="progress-bar-bg">
+        <div id="progressBar" class="progress-bar-fill"></div>
+      </div>
+      <div id="progressText">Loading... 0%</div>
+      <div id="loadingTip">Tip: Press H to honk your horn.</div>
+    </div>
+  </div>
+
+  <!-- ============ MAIN MENU ============ -->
+  <div id="mainMenu" class="overlay hidden">
+    <div class="menu-box">
+      <h1 class="game-title">BUS<span>SIMULATOR</span></h1>
+      <p class="subtitle">A Browser-Based 3D Bus Driving Simulation</p>
+      <button id="btnStart" class="menu-btn">Start Game</button>
+      <button id="btnContinue" class="menu-btn">Continue</button>
+      <button id="btnSettings" class="menu-btn">Settings</button>
+      <button id="btnControls" class="menu-btn">Controls</button>
+      <div class="menu-footer">v1.0 &mdash; Runs 100% in your browser</div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS PANEL ============ -->
+  <div id="settingsPanel" class="overlay hidden">
+    <div class="menu-box">
+      <h2>Settings</h2>
+      <label class="setting-row"><span>Volume</span><input type="range" id="volumeSlider" min="0" max="100" value="60"></label>
+      <label class="setting-row"><span>Shadows</span><input type="checkbox" id="shadowToggle" checked></label>
+      <label class="setting-row"><span>Rain</span><input type="checkbox" id="rainToggle"></label>
+      <label class="setting-row"><span>Time of Day</span>
+        <input type="range" id="timeSlider" min="0" max="24" step="0.1" value="9">
+      </label>
+      <button class="menu-btn" id="btnCloseSettings">Back</button>
+    </div>
+  </div>
+
+  <!-- ============ CONTROLS PANEL ============ -->
+  <div id="controlsPanel" class="overlay hidden">
+    <div class="menu-box controls-box">
+      <h2>Controls</h2>
+      <ul class="controls-list">
+        <li><b>W</b> Accelerate</li>
+        <li><b>S</b> Brake / Reverse</li>
+        <li><b>A / D</b> Steer Left / Right</li>
+        <li><b>Space</b> Hand Brake</li>
+        <li><b>H</b> Horn</li>
+        <li><b>L</b> Headlights</li>
+        <li><b>Q</b> Left Indicator</li>
+        <li><b>E</b> Right Indicator</li>
+        <li><b>R</b> Reset Bus</li>
+        <li><b>C</b> Change Camera</li>
+        <li><b>P</b> Pause</li>
+      </ul>
+      <button class="menu-btn" id="btnCloseControls">Back</button>
+    </div>
+  </div>
+
+  <!-- ============ PAUSE MENU ============ -->
+  <div id="pauseMenu" class="overlay hidden">
+    <div class="menu-box">
+      <h2>Paused</h2>
+      <button class="menu-btn" id="btnResume">Resume</button>
+      <button class="menu-btn" id="btnSave">Save Game</button>
+      <button class="menu-btn" id="btnMainMenu">Main Menu</button>
+    </div>
+  </div>
+
+  <!-- ============ HUD (in-game) ============ -->
+  <div id="hud" class="hidden">
+
+    <!-- Top left: mission panel -->
+    <div id="missionPanel" class="hud-panel">
+      <div class="mission-title">Mission</div>
+      <div id="missionText">Drive to the marked bus stop to pick up passengers.</div>
+      <div id="missionProgress"></div>
+    </div>
+
+    <!-- Top right: minimap -->
+    <canvas id="minimap" width="180" height="180"></canvas>
+
+    <!-- Top center: level/coins/xp -->
+    <div id="statsBar" class="hud-panel">
+      <span>💰 <b id="coinsVal">0</b></span>
+      <span>⭐ Lv <b id="levelVal">1</b></span>
+      <span>XP <b id="xpVal">0</b>/<b id="xpMaxVal">100</b></span>
+    </div>
+
+    <!-- FPS counter -->
+    <div id="fpsCounter" class="hud-panel small">60 FPS</div>
+
+    <!-- Bottom left: dashboard cluster -->
+    <div id="dashboard">
+      <div class="gauge" id="speedGauge">
+        <div class="gauge-value" id="speedValue">0</div>
+        <div class="gauge-label">km/h</div>
+      </div>
+      <div class="gauge small-gauge" id="rpmGauge">
+        <div class="gauge-value" id="rpmValue">0</div>
+        <div class="gauge-label">RPM x1000</div>
+      </div>
+      <div class="meter-col">
+        <div class="meter-row">Fuel
+          <div class="meter-bar"><div id="fuelBar" class="meter-fill fuel"></div></div>
+        </div>
+        <div class="meter-row">Gear: <span id="gearIndicator">D</span></div>
+      </div>
+      <div class="indicator-row">
+        <span id="indLeft" class="indicator">◀</span>
+        <span id="indHazard" class="indicator">⚠</span>
+        <span id="indRight" class="indicator">▶</span>
+        <span id="indLights" class="indicator">💡</span>
+        <span id="indHandbrake" class="indicator">🅿</span>
+      </div>
+    </div>
+
+    <!-- Camera / time hint -->
+    <div id="camHint" class="hud-panel small">Camera: Third Person (C to change)</div>
+  </div>
+
+  <!-- ============ NOTIFICATIONS ============ -->
+  <div id="notifications"></div>
+
+  <!-- ============ MOBILE TOUCH CONTROLS ============ -->
+  <div id="touchControls" class="hidden">
+    <div id="touchLeft" class="touch-btn">◀</div>
+    <div id="touchRight" class="touch-btn">▶</div>
+    <div id="touchBrake" class="touch-btn">BRK</div>
+    <div id="touchGas" class="touch-btn">GAS</div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
